@@ -3,8 +3,7 @@ use std::{env, fs, io::Cursor, process::Command, ptr::NonNull};
 use clap::{Parser, Subcommand};
 use image::DynamicImage;
 use raw_window_handle::{
-    RawDisplayHandle, RawWindowHandle,
-    WaylandDisplayHandle, WaylandWindowHandle,
+    RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
 use serde::Deserialize;
 use smithay_client_toolkit::{

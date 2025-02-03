@@ -23,7 +23,8 @@ impl CompositorBackend for HyprlandBackend {
 
         let mut windows: Vec<_> = Clients::get()
             .unwrap()
-            .into_iter().filter(|client| active_workspace_ids.contains(&client.workspace.id))
+            .into_iter()
+            .filter(|client| active_workspace_ids.contains(&client.workspace.id))
             .map(WindowDescriptor::from)
             .collect();
 
