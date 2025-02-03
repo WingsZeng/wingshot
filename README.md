@@ -1,13 +1,6 @@
-# Watershot
+# Wingshot
 
-A simple wayland native screenshot tool inspired by [Flameshot](https://flameshot.org/).
-
-## Packages
-
-On an Arch based distro, you can simply install the AUR package [watershot](https://aur.archlinux.org/packages/watershot),
-or [watershot-git](https://aur.archlinux.org/packages/watershot-git) for the latest git version.
-
-This project is a flake! If you have Nix, you know what to do.
+A fork of [Watershot](https://github.com/Kirottu/watershot), which is a simple wayland native screenshot tool inspired by [Flameshot](https://flameshot.org/).
 
 ## Manual installation
 
@@ -28,8 +21,8 @@ location you can use `--grim` or `-g` argument to set a custom path. A
 compositor that implements layer-shell is also a requirement.
 
 ```
-git clone https://github.com/Kirottu/watershot
-cd watershot
+git clone https://github.com/WingsZeng/wingshot
+cd wingshot
 cargo install --path .
 ```
 
@@ -54,8 +47,8 @@ Options:
 
 ## Configuration
 
-Watershot supports configuration of colors, fonts, sizes, etc. via it's config
-file. The config file is saved in `~/.config/watershot.ron` and uses the ron
+Wingshot supports configuration of colors, fonts, sizes, etc. via it's config
+file. The config file is saved in `~/.config/wingshot.ron` and uses the ron
 config format.
 
 Here is an example config for it:
