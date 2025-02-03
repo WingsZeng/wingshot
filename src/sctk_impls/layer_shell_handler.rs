@@ -1,6 +1,7 @@
 use smithay_client_toolkit::{
     delegate_layer,
     reexports::client::{Connection, QueueHandle},
+    seat::pointer::CursorIcon,
     shell::wlr_layer::{LayerShellHandler, LayerSurface, LayerSurfaceConfigure},
 };
 
@@ -23,13 +24,11 @@ impl LayerShellHandler for RuntimeData {
         _configure: LayerSurfaceConfigure,
         _serial: u32,
     ) {
-        let _ = self.themed_pointer.as_ref().unwrap().set_cursor(
-            conn,
-            "crosshair",
-            self.shm_state.wl_shm(),
-            &self.pointer_surface,
-            1,
-        );
+        let _ = self
+            .themed_pointer
+            .as_ref()
+            .unwrap()
+            .set_cursor(conn, CursorIcon::Crosshair);
 
         log::info!("{:?}", _configure);
 
@@ -55,6 +54,8 @@ impl LayerShellHandler for RuntimeData {
                 present_mode: wgpu::PresentMode::Mailbox,
                 alpha_mode: wgpu::CompositeAlphaMode::Opaque,
                 view_formats: vec![cap.formats[0]],
+                // NOTE: default frame_delay is 2
+                desired_maximum_frame_latency: 2,
             },
         );
 

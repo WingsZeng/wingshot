@@ -86,7 +86,7 @@ impl RuntimeData {
             .expect("Failed to run grim command!")
             .stdout;
 
-        let image = image::io::Reader::with_format(Cursor::new(output), image::ImageFormat::Pnm)
+        let image = image::ImageReader::with_format(Cursor::new(output), image::ImageFormat::Pnm)
             .decode()
             .expect("Failed to parse grim image!");
 
@@ -101,7 +101,7 @@ impl RuntimeData {
         let compositor_state =
             CompositorState::bind(globals, qh).expect("wl_compositor is not available");
 
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
@@ -118,7 +118,7 @@ impl RuntimeData {
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: None,
-                features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
+                required_features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
                 ..Default::default()
             },
             None,
@@ -199,7 +199,7 @@ impl RuntimeData {
 
     pub fn draw(&mut self, identification: MonitorIdentification, qh: &QueueHandle<Self>) {
         let Some(renderer) = &mut self.renderer else {
-            return
+            return;
         };
 
         let monitor = match identification {

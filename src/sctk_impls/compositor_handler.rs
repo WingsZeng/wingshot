@@ -27,4 +27,31 @@ impl CompositorHandler for RuntimeData {
     ) {
         self.draw(MonitorIdentification::Surface(surface.clone()), qh);
     }
+
+    fn transform_changed(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _surface: &wl_surface::WlSurface,
+        _new_transform: wayland_client::protocol::wl_output::Transform,
+    ) {
+    }
+
+    fn surface_enter(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _surface: &wl_surface::WlSurface,
+        _output: &wayland_client::protocol::wl_output::WlOutput,
+    ) {
+    }
+
+    fn surface_leave(
+        &mut self,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _surface: &wl_surface::WlSurface,
+        _output: &wayland_client::protocol::wl_output::WlOutput,
+    ) {
+    }
 }

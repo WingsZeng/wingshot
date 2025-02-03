@@ -107,12 +107,14 @@ impl Renderer {
             layout: Some(&tex_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &tex_shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
                 buffers: &[TexVertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &tex_shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
                     blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
@@ -135,6 +137,7 @@ impl Renderer {
                 alpha_to_coverage_enabled: false,
             },
             multiview: None,
+            cache: None,
         });
 
         let tex_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -183,12 +186,14 @@ impl Renderer {
             layout: Some(&overlay_layout),
             vertex: wgpu::VertexState {
                 module: &color_shapes_shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
                 buffers: &[OverlayVertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &color_shapes_shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -211,6 +216,7 @@ impl Renderer {
                 alpha_to_coverage_enabled: false,
             },
             multiview: None,
+            cache: None,
         });
 
         let shade_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -275,10 +281,12 @@ impl Renderer {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.tex_pipeline);
             render_pass.set_vertex_buffer(0, self.tex_vertex_buffer.slice(..));
@@ -294,10 +302,12 @@ impl Renderer {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.overlay_pipeline);
             render_pass.set_vertex_buffer(0, rendering.shade_vertex_buffer.slice(..));
@@ -317,10 +327,12 @@ impl Renderer {
                     resolve_target: Some(&rendering.ms_resolve_target_tex),
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
-                        store: false,
+                        store: wgpu::StoreOp::Discard,
                     },
                 })],
                 depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.overlay_pipeline);
             render_pass.set_vertex_buffer(0, rendering.sel_vertex_buffer.slice(..));
@@ -340,10 +352,12 @@ impl Renderer {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.tex_pipeline);
             render_pass.set_vertex_buffer(0, self.tex_vertex_buffer.slice(..));
@@ -366,10 +380,12 @@ impl Renderer {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
 
             rendering.brush.draw(&mut render_pass);
@@ -405,14 +421,14 @@ impl MonSpecificRendering {
             });
 
         runtime_data.queue.write_texture(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfo {
                 texture: &bg_tex,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
             &background,
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * background.width()),
                 rows_per_image: Some(background.height()),
@@ -591,12 +607,7 @@ impl MonSpecificRendering {
     ) {
         let flatten_selection = selection.flattened();
 
-        let (shade_vertices, shade_indices, sel_vertices, sel_indices): (
-            Vec<[f32; 2]>,
-            Vec<u32>,
-            Vec<[f32; 2]>,
-            Vec<u32>,
-        ) = match flatten_selection {
+        let (shade_vertices, shade_indices, sel_vertices, sel_indices) = match flatten_selection {
             Selection::Rectangle(Some(selection)) => {
                 match selection.extents.to_rect().constrain(mon_rect) {
                     None => {

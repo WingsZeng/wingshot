@@ -3,6 +3,7 @@ use smithay_client_toolkit::{
     delegate_seat,
     reexports::client::{protocol::wl_seat, Connection, QueueHandle},
     seat::{pointer::ThemeSpec, Capability, SeatHandler, SeatState},
+    shm::ShmHandler,
 };
 
 use crate::runtime_data::RuntimeData;
@@ -38,9 +39,12 @@ impl SeatHandler for RuntimeData {
         {
             info!("Set pointer capability");
 
+            let shm = self.shm_state().wl_shm().clone();
+            let surface = self.pointer_surface.clone();
+
             let themed_pointer = self
                 .seat_state
-                .get_pointer_with_theme(qh, &seat, ThemeSpec::default())
+                .get_pointer_with_theme(qh, &seat, &shm, surface, ThemeSpec::default())
                 .expect("Failed to create themed pointer");
             self.pointer = Some(themed_pointer.pointer().clone());
             self.themed_pointer = Some(themed_pointer);
