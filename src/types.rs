@@ -84,7 +84,7 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        let string = fs::read_to_string(format!("{}/.config/watershot.ron", env::var("HOME")?))?;
+        let string = fs::read_to_string(format!("{}/.config/wingshot.ron", env::var("HOME")?))?;
         Ok(ron::from_str(&string)?)
     }
 }
@@ -161,7 +161,7 @@ impl Monitor {
             qh,
             wl_surface.clone(),
             Layer::Overlay,
-            Some("watershot"),
+            Some("wingshot"),
             Some(&output),
         );
 

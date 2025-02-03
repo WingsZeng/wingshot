@@ -46,7 +46,7 @@ fn main() {
                     let local = Local::now();
                     if let Err(why) = image.save(
                         local
-                            .format(&format!("{}/Watershot_%d-%m-%Y_%H:%M.png", path))
+                            .format(&format!("{}/Wingshot_%d-%m-%Y_%H:%M.png", path))
                             .to_string(),
                     ) {
                         error!("Error saving image: {}", why);
@@ -94,7 +94,7 @@ fn main() {
 fn gui(args: &Args) -> Option<DynamicImage> {
     let conn = Connection::connect_to_env();
     if conn.is_err() {
-        log::error!("Could not connect to the Wayland server, make sure you run watershot within a Wayland session!");
+        log::error!("Could not connect to the Wayland server, make sure you run wingshot within a Wayland session!");
         std::process::exit(1);
     }
 
