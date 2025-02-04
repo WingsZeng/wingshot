@@ -1,5 +1,6 @@
 use std::{fs, io::Cursor, process::Command};
 
+use anyhow::Context;
 use fontconfig::Fontconfig;
 use image::DynamicImage;
 
@@ -77,29 +78,33 @@ impl RuntimeData {
         HyprlandBackend::try_new().ok()
     }
 
-    pub fn new(qh: &QueueHandle<Self>, globals: &GlobalList, mut args: Args) -> Self {
+    pub fn new(
+        qh: &QueueHandle<Self>,
+        globals: &GlobalList,
+        mut args: Args,
+    ) -> anyhow::Result<Self> {
         let output = Command::new(args.grim.as_ref().unwrap_or(&"grim".to_string()))
             .arg("-t")
             .arg("ppm")
             .arg("-")
             .output()
-            .expect("Failed to run grim command!")
+            .with_context(|| "Failed to run grim command!")?
             .stdout;
 
         let image = image::ImageReader::with_format(Cursor::new(output), image::ImageFormat::Pnm)
             .decode()
-            .expect("Failed to parse grim image!");
+            .with_context(|| "Failed to parse grim image!")?;
 
         let config = Config::load().unwrap_or_default();
 
-        let fc = Fontconfig::new().expect("Failed to init FontConfig");
+        let fc = Fontconfig::new().with_context(|| "Failed to init FontConfig")?;
 
         let fc_font = fc
             .find(&config.font_family, None)
-            .expect("Failed to find font");
+            .with_context(|| "Failed to find font")?;
 
         let compositor_state =
-            CompositorState::bind(globals, qh).expect("wl_compositor is not available");
+            CompositorState::bind(globals, qh).with_context(|| "wl_compositor is not available")?;
 
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
@@ -113,7 +118,7 @@ impl RuntimeData {
                 compatible_surface: None,
                 ..Default::default()
             }))
-            .unwrap();
+            .with_context(|| "Failed to find a compatible GPU adapter")?;
 
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
@@ -123,7 +128,7 @@ impl RuntimeData {
             },
             None,
         ))
-        .unwrap();
+        .with_context(|| "Failed to request a GPU device")?;
 
         let compositor_backend = Self::get_preferred_backend();
 
@@ -163,13 +168,14 @@ impl RuntimeData {
             };
         }
 
-        RuntimeData {
+        Ok(RuntimeData {
             registry_state: RegistryState::new(globals),
             seat_state: SeatState::new(globals, qh),
             output_state: OutputState::new(globals, qh),
             compositor_state,
-            layer_state: LayerShell::bind(globals, qh).expect("layer shell is not available"),
-            shm_state: Shm::bind(globals, qh).expect("wl_shm is not available"),
+            layer_state: LayerShell::bind(globals, qh)
+                .with_context(|| "layer shell is not available")?,
+            shm_state: Shm::bind(globals, qh).with_context(|| "wl_shm is not available")?,
             selection,
             config,
             area: Rect::default(),
@@ -189,12 +195,12 @@ impl RuntimeData {
             queue,
             renderer: None,
             font: wgpu_text::glyph_brush::ab_glyph::FontArc::try_from_vec(
-                fs::read(fc_font.path).expect("Failed to load font"),
+                fs::read(fc_font.path).with_context(|| "Failed to load font")?,
             )
-            .expect("Invalid font data"),
+            .with_context(|| "Invalid font data")?,
             compositor_backend,
             windows,
-        }
+        })
     }
 
     pub fn draw(&mut self, identification: MonitorIdentification, qh: &QueueHandle<Self>) {

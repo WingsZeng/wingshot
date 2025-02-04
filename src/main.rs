@@ -1,9 +1,10 @@
 use std::io::{self, Cursor, Write};
 
+use anyhow::Context;
 use chrono::Local;
 use clap::Parser;
 use image::{DynamicImage, ImageFormat};
-use log::{error, info};
+use log::info;
 use runtime_data::RuntimeData;
 use smithay_client_toolkit::reexports::client::{globals::registry_queue_init, Connection};
 use traits::{Contains, ToLocal};
@@ -29,53 +30,49 @@ mod sctk_impls {
 }
 mod rendering;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     env_logger::init();
 
-    if let Some(image) = gui(&args) {
+    if let Some(image) = gui(&args).with_context(|| "Failed to initialize GUI")? {
         // Save the file if an argument for that is present
         if let Some(save_location) = &args.save {
             match save_location {
-                SaveLocation::Path { path } => {
-                    if let Err(why) = image.save(path) {
-                        error!("Error saving image: {}", why);
-                    }
-                }
+                SaveLocation::Path { path } => image.save(path),
                 SaveLocation::Directory { path } => {
                     let local = Local::now();
-                    if let Err(why) = image.save(
+                    image.save(
                         local
                             .format(&format!("{}/Wingshot_%d-%m-%Y_%H:%M.png", path))
                             .to_string(),
-                    ) {
-                        error!("Error saving image: {}", why);
-                    }
+                    )
                 }
             }
+            .with_context(|| "Error saving image")?
         }
 
         // Save the selected image into the buffer
         let mut buf = Cursor::new(Vec::new());
         image
             .write_to(&mut buf, ImageFormat::Png)
-            .expect("Failed to write image to buffer as PNG");
+            .with_context(|| "Failed to write image to buffer as PNG")?;
 
         let buf = buf.into_inner();
 
         if args.stdout {
-            if let Err(why) = io::stdout().lock().write_all(&buf) {
-                error!("Failed to write image content to stdout: {}", why);
-            }
+            io::stdout()
+                .lock()
+                .write_all(&buf)
+                .with_context(|| "Failed to write image content to stdout")?;
         }
 
         // Fork to serve copy requests
         if args.copy {
-            match unsafe { nix::unistd::fork() } {
-                Ok(nix::unistd::ForkResult::Parent { .. }) => {
+            match unsafe { nix::unistd::fork().with_context(|| "Failed to fork")? } {
+                nix::unistd::ForkResult::Parent { .. } => {
                     info!("Forked to serve copy requests")
                 }
-                Ok(nix::unistd::ForkResult::Child) => {
+                nix::unistd::ForkResult::Child => {
                     // Serve copy requests
                     let mut opts = copy::Options::new();
                     opts.foreground(true);
@@ -83,42 +80,45 @@ fn main() {
                         copy::Source::Bytes(buf.into_boxed_slice()),
                         copy::MimeType::Autodetect,
                     )
-                    .expect("Failed to serve copied image");
+                    .with_context(|| "Failed to serve copied image")?;
                 }
-                Err(why) => println!("Failed to fork: {}", why),
             }
         }
     }
+
+    Ok(())
 }
 
-fn gui(args: &Args) -> Option<DynamicImage> {
-    let conn = Connection::connect_to_env();
-    if conn.is_err() {
-        log::error!("Could not connect to the Wayland server, make sure you run wingshot within a Wayland session!");
-        std::process::exit(1);
-    }
+fn gui(args: &Args) -> anyhow::Result<Option<DynamicImage>> {
+    let conn = Connection::connect_to_env().with_context(|| "Could not connect to the Wayland server, make sure you run wingshot within a Wayland session!")?;
 
-    let conn = conn.unwrap();
-
-    let (globals, mut event_queue) = registry_queue_init(&conn).unwrap();
+    let (globals, mut event_queue) =
+        registry_queue_init(&conn).with_context(|| "Failed initialize a new event queue")?;
     let qh = event_queue.handle();
-    let mut runtime_data = RuntimeData::new(&qh, &globals, args.clone());
+    let mut runtime_data = RuntimeData::new(&qh, &globals, args.clone())
+        .with_context(|| "Failed to create runtime data")?;
 
     // Fetch the outputs from the compositor
-    event_queue.roundtrip(&mut runtime_data).unwrap();
+    event_queue
+        .roundtrip(&mut runtime_data)
+        .with_context(|| "Failed to roundtrip the event queue")
+        .with_context(|| "Failed to fetch the outputs from the compositor")?;
     // Has to be iterated first to get the full area size
     let sizes = runtime_data
         .output_state
         .outputs()
         .map(|output| {
-            let info = runtime_data.output_state.info(&output).unwrap();
+            let info = runtime_data
+                .output_state
+                .info(&output)
+                .with_context(|| "Failed to get output info")?;
             let size = info
                 .logical_size
                 .map(|(w, h)| (w as u32, h as u32))
-                .expect("Can't determine monitor size!");
+                .with_context(|| "Can't determine monitor size!")?;
             let pos = info
                 .logical_position
-                .expect("Can't determine monitor position!");
+                .with_context(|| "Can't determine monitor position!")?;
 
             let rect = Rect {
                 x: pos.0,
@@ -129,24 +129,29 @@ fn gui(args: &Args) -> Option<DynamicImage> {
 
             // Extend the area spanning all monitors with the current monitor
             runtime_data.area.extend(&rect);
-            (rect, output, info)
+            Ok((rect, output, info))
         })
-        .collect::<Vec<_>>();
+        .collect::<anyhow::Result<Vec<_>>>()?;
 
     runtime_data.scale_factor = runtime_data.image.width() as f32 / runtime_data.area.width as f32;
 
     for (rect, output, info) in sizes {
-        runtime_data
-            .monitors
-            .push(Monitor::new(rect, &qh, &conn, output, info, &runtime_data));
+        runtime_data.monitors.push(
+            Monitor::new(rect, &qh, &conn, output, info, &runtime_data)
+                .with_context(|| "Failed to create a monitor")?,
+        )
     }
 
-    event_queue.roundtrip(&mut runtime_data).unwrap();
+    event_queue
+        .roundtrip(&mut runtime_data)
+        .with_context(|| "Failed to roundtrip the event queue")?;
 
     loop {
-        event_queue.blocking_dispatch(&mut runtime_data).unwrap();
+        event_queue
+            .blocking_dispatch(&mut runtime_data)
+            .with_context(|| "Failed to dispatch events")?;
         match runtime_data.exit {
-            ExitState::ExitOnly => return None,
+            ExitState::ExitOnly => return Ok(None),
             ExitState::ExitWithSelection(rect) => {
                 let image = match runtime_data.monitors.into_iter().find_map(|mon| {
                     if mon.rect.contains(&rect) {
@@ -172,7 +177,7 @@ fn gui(args: &Args) -> Option<DynamicImage> {
                     ),
                 };
 
-                return Some(image);
+                return Ok(Some(image));
             }
             ExitState::None => (),
         }
