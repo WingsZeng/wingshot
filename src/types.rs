@@ -1,5 +1,6 @@
 use std::{env, fs, io::Cursor, process::Command, ptr::NonNull};
 
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use image::DynamicImage;
 use raw_window_handle::{
@@ -153,7 +154,7 @@ impl Monitor {
         output: wl_output::WlOutput,
         info: OutputInfo,
         runtime_data: &RuntimeData,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let wl_surface = runtime_data.compositor_state.create_surface(qh);
 
         let layer = runtime_data.layer_state.create_layer_surface(
@@ -187,23 +188,24 @@ impl Monitor {
         .arg(info.name.as_ref().unwrap())
         .arg("-")
         .output()
-        .expect("Failed to run grim command!")
+        .with_context(|| "Failed to run grim command!")?
         .stdout;
 
         let image =
             image::ImageReader::with_format(Cursor::new(grim_output), image::ImageFormat::Pnm)
                 .decode()
-                .expect("Failed to parse grim image!");
-        let handle = get_raw_handles(conn, &wl_surface);
+                .with_context(|| "Failed to parse grim image!")?;
+        let handle =
+            get_raw_handles(conn, &wl_surface).with_context(|| "Failed to get raw handles")?;
 
         let surface = unsafe {
             runtime_data
                 .instance
                 .create_surface_unsafe(handle)
-                .expect("Failed to create surface")
+                .with_context(|| "Failed to create surface")?
         };
 
-        Self {
+        Ok(Self {
             layer,
             wl_surface,
             rect,
@@ -211,7 +213,7 @@ impl Monitor {
             image,
             surface,
             rendering: None,
-        }
+        })
     }
 }
 
@@ -426,19 +428,19 @@ pub enum SelectionState {
 pub fn get_raw_handles(
     conn: &Connection,
     surface: &wl_surface::WlSurface,
-) -> wgpu::SurfaceTargetUnsafe {
+) -> anyhow::Result<wgpu::SurfaceTargetUnsafe> {
     let display_handle = WaylandDisplayHandle::new(
         NonNull::new(conn.backend().display_ptr() as *mut std::ffi::c_void)
-            .expect("Received null pointer for display"),
+            .with_context(|| "Received null pointer for display")?,
     );
 
     let window_handle = WaylandWindowHandle::new(
         NonNull::new(surface.id().as_ptr() as *mut std::ffi::c_void)
-            .expect("Received null pointer for surface"),
+            .with_context(|| "Received null pointer for surface")?,
     );
 
-    wgpu::SurfaceTargetUnsafe::RawHandle {
+    Ok(wgpu::SurfaceTargetUnsafe::RawHandle {
         raw_display_handle: RawDisplayHandle::Wayland(display_handle),
         raw_window_handle: RawWindowHandle::Wayland(window_handle),
-    }
+    })
 }
