@@ -148,13 +148,11 @@ fn gui(args: &Args) -> Option<DynamicImage> {
         match runtime_data.exit {
             ExitState::ExitOnly => return None,
             ExitState::ExitWithSelection(rect) => {
-                let image = match runtime_data.monitors.into_iter().find_map(|mon| {
-                    if mon.rect.contains(&rect) {
-                        Some(mon)
-                    } else {
-                        None
-                    }
-                }) {
+                let image = match runtime_data
+                    .monitors
+                    .into_iter()
+                    .find_map(|mon| mon.rect.contains(&rect).then_some(mon))
+                {
                     Some(mon) => {
                         let rect = rect.to_local(&mon.rect);
                         mon.image.crop_imm(
