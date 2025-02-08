@@ -30,7 +30,7 @@ pub struct Args {
     #[arg(short, long)]
     pub copy: bool,
 
-    /// Output the screenshot into stdout in PNG format
+    /// Output the screenshot into stdout
     #[arg(short, long)]
     pub stdout: bool,
 
@@ -59,6 +59,14 @@ pub struct Args {
     /// Automatically captures the pre-selected window, skipping interactive mode.
     #[arg(long)]
     pub auto_capture: bool,
+
+    /// The format of the saved image.
+    #[arg(short = 'f', long, default_value = "webp")]
+    pub save_format: String,
+
+    /// The format of the copied image and output to stdout.
+    #[arg(long, default_value = "png")]
+    pub copy_format: String,
 }
 
 #[derive(Subcommand, Clone, Debug)]

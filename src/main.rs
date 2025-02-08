@@ -37,25 +37,36 @@ fn main() -> anyhow::Result<()> {
     if let Some(image) = gui(&args).with_context(|| "Failed to initialize GUI")? {
         // Save the file if an argument for that is present
         if let Some(save_location) = &args.save {
-            match save_location {
-                SaveLocation::Path { path } => image.save(path),
+            let path = match save_location {
+                SaveLocation::Path { path } => path.clone(),
                 SaveLocation::Directory { path } => {
                     let local = Local::now();
-                    image.save(
-                        local
-                            .format(&format!("{}/Wingshot_%d-%m-%Y_%H:%M.png", path))
-                            .to_string(),
-                    )
+                    local
+                        .format(&format!(
+                            "{}/Wingshot_%d-%m-%Y_%H:%M.{}",
+                            path, args.save_format
+                        ))
+                        .to_string()
                 }
-            }
-            .with_context(|| "Error saving image")?
+            };
+            image
+                .save_with_format(
+                    path,
+                    ImageFormat::from_extension(&args.save_format)
+                        .with_context(|| "Invalid or unsupported image format")?,
+                )
+                .with_context(|| "Error saving image")?
         }
 
         // Save the selected image into the buffer
         let mut buf = Cursor::new(Vec::new());
         image
-            .write_to(&mut buf, ImageFormat::Png)
-            .with_context(|| "Failed to write image to buffer as PNG")?;
+            .write_to(
+                &mut buf,
+                ImageFormat::from_extension(&args.copy_format)
+                    .with_context(|| "Invalid or unsupported image format")?,
+            )
+            .with_context(|| "Failed to write image to buffer")?;
 
         let buf = buf.into_inner();
 
