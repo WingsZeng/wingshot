@@ -19,7 +19,10 @@ use wayland_client::{
     Connection, Proxy, QueueHandle,
 };
 
-use crate::{rendering::MonSpecificRendering, runtime_data::RuntimeData, window::WindowDescriptor};
+use crate::{
+    rendering::MonSpecificRendering, runtime_data::RuntimeData, traits::ToLocal,
+    window::WindowDescriptor,
+};
 
 use crate::window::search::WindowSearchParam;
 
@@ -142,15 +145,46 @@ impl From<Color> for wgpu_text::glyph_brush::Color {
     }
 }
 
+/// A screenshot and the region it covers in global logical coordinates
+pub struct Capture {
+    pub rect: Rect<i32>,
+    pub image: DynamicImage,
+}
+
+impl Capture {
+    /// Physical pixels per logical unit
+    pub fn scale(&self) -> f32 {
+        self.image.width() as f32 / self.rect.width as f32
+    }
+
+    pub fn physical_size(&self) -> (u32, u32) {
+        (self.image.width(), self.image.height())
+    }
+
+    /// Crop to a region in global logical coordinates
+    pub fn crop(&self, rect: &Rect<i32>) -> DynamicImage {
+        let rect = rect.to_local(&self.rect);
+        let scale_x = self.image.width() as f32 / self.rect.width as f32;
+        let scale_y = self.image.height() as f32 / self.rect.height as f32;
+
+        let to_physical = |logical: i32, scale: f32, max: u32| {
+            ((logical as f32 * scale).round().max(0.0) as u32).min(max)
+        };
+        let x = to_physical(rect.x, scale_x, self.image.width());
+        let y = to_physical(rect.y, scale_y, self.image.height());
+        let end_x = to_physical(rect.x + rect.width, scale_x, self.image.width());
+        let end_y = to_physical(rect.y + rect.height, scale_y, self.image.height());
+
+        self.image.crop_imm(x, y, end_x - x, end_y - y)
+    }
+}
+
 /// Represents the layer and the monitor it resides on
 pub struct Monitor {
     pub layer: LayerSurface,
     pub wl_surface: wl_surface::WlSurface,
     pub surface: wgpu::Surface<'static>,
-    pub output_info: OutputInfo,
-    pub rect: Rect<i32>,
-    pub image: DynamicImage,
-    /// The wayland scale factor for this monitor
+    pub capture: Capture,
     pub rendering: Option<MonSpecificRendering>,
 }
 
@@ -173,8 +207,9 @@ impl Monitor {
             Some(&output),
         );
 
-        // Set the right scale for the buffer
-        wl_surface.set_buffer_scale(info.scale_factor);
+        // Unlike `set_buffer_scale`, this supports fractional scales
+        let viewport = runtime_data.viewporter.get_viewport(&wl_surface, qh, ());
+        viewport.set_destination(rect.width, rect.height);
 
         layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
         layer.set_exclusive_zone(-1);
@@ -216,10 +251,8 @@ impl Monitor {
         Ok(Self {
             layer,
             wl_surface,
-            rect,
-            output_info: info,
-            image,
             surface,
+            capture: Capture { rect, image },
             rendering: None,
         })
     }
@@ -423,7 +456,7 @@ pub enum ExitState {
     None,
     /// Only exit
     ExitOnly,
-    /// Exit and perform actions on the selection
+    /// Exit and perform actions on the selection (in global logical coordinates)
     ExitWithSelection(Rect<i32>),
 }
 

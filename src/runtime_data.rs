@@ -2,15 +2,16 @@ use std::{fs, io::Cursor, process::Command};
 
 use anyhow::Context;
 use fontconfig::Fontconfig;
-use image::DynamicImage;
-
 use smithay_client_toolkit::{
     compositor::CompositorState,
     output::OutputState,
-    reexports::client::{
-        globals::GlobalList,
-        protocol::{wl_keyboard, wl_pointer, wl_surface},
-        QueueHandle,
+    reexports::{
+        client::{
+            globals::GlobalList,
+            protocol::{wl_keyboard, wl_pointer, wl_surface},
+            QueueHandle,
+        },
+        protocols::wp::viewporter::client::wp_viewporter::WpViewporter,
     },
     registry::RegistryState,
     seat::{pointer::ThemedPointer, SeatState},
@@ -23,7 +24,7 @@ use crate::{
     rendering::Renderer,
     traits::{Contains, DistanceTo},
     types::{
-        Args, ExitState, MonitorIdentification, RectangleSelection, SelectionModifier,
+        Args, Capture, ExitState, MonitorIdentification, RectangleSelection, SelectionModifier,
         SelectionState,
     },
     window::{
@@ -42,6 +43,7 @@ pub struct RuntimeData {
     pub compositor_state: CompositorState,
     pub layer_state: LayerShell,
     pub shm_state: Shm,
+    pub viewporter: WpViewporter,
 
     // Devices
     pub keyboard: Option<wl_keyboard::WlKeyboard>,
@@ -50,15 +52,12 @@ pub struct RuntimeData {
     pub pointer_surface: wl_surface::WlSurface,
     pub themed_pointer: Option<ThemedPointer>,
 
-    /// Combined area of all monitors
-    pub area: Rect<i32>,
-    /// The scale factor of the screenshot image
-    pub scale_factor: f32,
+    /// Screenshot of all monitors
+    pub capture: Capture,
     pub selection: Selection,
     pub monitors: Vec<Monitor>,
     pub config: Config,
     pub font: wgpu_text::glyph_brush::ab_glyph::FontArc,
-    pub image: DynamicImage,
     pub exit: ExitState,
     pub args: Args,
 
@@ -176,13 +175,17 @@ impl RuntimeData {
             layer_state: LayerShell::bind(globals, qh)
                 .with_context(|| "layer shell is not available")?,
             shm_state: Shm::bind(globals, qh).with_context(|| "wl_shm is not available")?,
+            viewporter: globals
+                .bind(qh, 1..=1, ())
+                .with_context(|| "wp_viewporter is not available")?,
             selection,
             config,
-            area: Rect::default(),
+            // Extended with each monitor later
+            capture: Capture {
+                rect: Rect::default(),
+                image,
+            },
             monitors: Vec::new(),
-            // Set later
-            scale_factor: 0.0,
-            image,
             keyboard: None,
             pointer: None,
             themed_pointer: None,
@@ -223,7 +226,7 @@ impl RuntimeData {
 
         if let Some(rendering) = &mut monitor.rendering {
             rendering.update_overlay_vertices(
-                &monitor.rect,
+                &monitor.capture.rect,
                 &monitor.wl_surface,
                 &self.selection,
                 &self.config,
@@ -251,9 +254,12 @@ impl RuntimeData {
 
         self.queue.submit(Some(encoder.finish()));
 
-        monitor
-            .wl_surface
-            .damage(0, 0, monitor.rect.width, monitor.rect.height);
+        monitor.wl_surface.damage(
+            0,
+            0,
+            monitor.capture.rect.width,
+            monitor.capture.rect.height,
+        );
         monitor.wl_surface.frame(qh, monitor.wl_surface.clone());
         surface_texture.present();
         monitor.wl_surface.commit();
