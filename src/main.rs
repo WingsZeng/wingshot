@@ -7,7 +7,7 @@ use image::{DynamicImage, ImageFormat};
 use log::info;
 use runtime_data::RuntimeData;
 use smithay_client_toolkit::reexports::client::{globals::registry_queue_init, Connection};
-use traits::{Contains, ToLocal};
+use traits::Contains;
 use types::{Args, Config, ExitState, Monitor, Rect, SaveLocation, Selection};
 use wl_clipboard_rs::copy;
 
@@ -27,6 +27,7 @@ mod sctk_impls {
     mod provides_registry_state;
     mod seat_handler;
     mod shm_handler;
+    mod viewporter_handler;
 }
 mod rendering;
 
@@ -139,12 +140,10 @@ fn gui(args: &Args) -> anyhow::Result<Option<DynamicImage>> {
             };
 
             // Extend the area spanning all monitors with the current monitor
-            runtime_data.area.extend(&rect);
+            runtime_data.capture.rect.extend(&rect);
             Ok((rect, output, info))
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
-
-    runtime_data.scale_factor = runtime_data.image.width() as f32 / runtime_data.area.width as f32;
 
     for (rect, output, info) in sizes {
         runtime_data.monitors.push(
@@ -166,24 +165,11 @@ fn gui(args: &Args) -> anyhow::Result<Option<DynamicImage>> {
             ExitState::ExitWithSelection(rect) => {
                 let image = match runtime_data
                     .monitors
-                    .into_iter()
-                    .find_map(|mon| mon.rect.contains(&rect).then_some(mon))
+                    .iter()
+                    .find(|mon| mon.capture.rect.contains(&rect))
                 {
-                    Some(mon) => {
-                        let rect = rect.to_local(&mon.rect);
-                        mon.image.crop_imm(
-                            rect.x as u32,
-                            rect.y as u32,
-                            rect.width as u32,
-                            rect.height as u32,
-                        )
-                    }
-                    None => runtime_data.image.crop_imm(
-                        (rect.x as f32 * runtime_data.scale_factor) as u32,
-                        (rect.y as f32 * runtime_data.scale_factor) as u32,
-                        (rect.width as f32 * runtime_data.scale_factor) as u32,
-                        (rect.height as f32 * runtime_data.scale_factor) as u32,
-                    ),
+                    Some(mon) => mon.capture.crop(&rect),
+                    None => runtime_data.capture.crop(&rect),
                 };
 
                 return Ok(Some(image));

@@ -1,5 +1,3 @@
-use image::RgbaImage;
-use smithay_client_toolkit::output::OutputInfo;
 use wgpu::util::DeviceExt;
 use wgpu_text::glyph_brush::{HorizontalAlign, Layout, OwnedSection, OwnedText, VerticalAlign};
 
@@ -7,7 +5,7 @@ use crate::{
     handles,
     runtime_data::RuntimeData,
     traits::{Padded, ToLocal, ToRender},
-    types::{Config, Monitor, Rect, Selection},
+    types::{Capture, Config, Monitor, Rect, Selection},
 };
 
 use wayland_client::protocol::wl_surface;
@@ -394,13 +392,11 @@ impl Renderer {
 }
 
 impl MonSpecificRendering {
-    pub fn new(
-        rect: &Rect<i32>,
-        info: &OutputInfo,
-        format: wgpu::TextureFormat,
-        background: RgbaImage,
-        runtime_data: &RuntimeData,
-    ) -> Self {
+    pub fn new(capture: &Capture, format: wgpu::TextureFormat, runtime_data: &RuntimeData) -> Self {
+        let background = capture.image.to_rgba8();
+        let (width, height) = capture.physical_size();
+        let text_size = runtime_data.config.mode_text_size as f32 * capture.scale();
+
         let bg_tex_size = wgpu::Extent3d {
             width: background.width(),
             height: background.height(),
@@ -486,8 +482,8 @@ impl MonSpecificRendering {
         });
 
         let ms_size = wgpu::Extent3d {
-            width: (rect.width * info.scale_factor) as u32,
-            height: (rect.height * info.scale_factor) as u32,
+            width,
+            height,
             depth_or_array_layers: 1,
         };
 
@@ -541,14 +537,11 @@ impl MonSpecificRendering {
 
         let brush = wgpu_text::BrushBuilder::using_font(runtime_data.font.clone()).build(
             &runtime_data.device,
-            (rect.width * info.scale_factor) as u32,
-            (rect.height * info.scale_factor) as u32,
+            width,
+            height,
             format,
         );
-        let pos = (
-            (rect.width * info.scale_factor) as f32 / 2.0,
-            (rect.height * info.scale_factor) as f32 / 2.0,
-        );
+        let pos = (width as f32 / 2.0, height as f32 / 2.0);
         let layout = Layout::default()
             .h_align(HorizontalAlign::Center)
             .v_align(VerticalAlign::Center);
@@ -556,7 +549,7 @@ impl MonSpecificRendering {
         let rect_mode_section = OwnedSection::default()
             .add_text(
                 OwnedText::new("RECTANGLE MODE")
-                    .with_scale((runtime_data.config.mode_text_size * info.scale_factor) as f32)
+                    .with_scale(text_size)
                     .with_color(runtime_data.config.text_color),
             )
             .with_layout(layout)
@@ -564,7 +557,7 @@ impl MonSpecificRendering {
         let display_mode_section = OwnedSection::default()
             .add_text(
                 OwnedText::new("DISPLAY MODE")
-                    .with_scale((runtime_data.config.mode_text_size * info.scale_factor) as f32)
+                    .with_scale(text_size)
                     .with_color(runtime_data.config.text_color),
             )
             .with_layout(layout)
@@ -573,7 +566,7 @@ impl MonSpecificRendering {
         let window_mode_section = OwnedSection::default()
             .add_text(
                 OwnedText::new("WINDOW MODE")
-                    .with_scale((runtime_data.config.mode_text_size * info.scale_factor) as f32)
+                    .with_scale(text_size)
                     .with_color(runtime_data.config.text_color),
             )
             .with_layout(layout)

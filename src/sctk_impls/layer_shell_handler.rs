@@ -44,13 +44,15 @@ impl LayerShellHandler for RuntimeData {
             self.renderer = Some(Renderer::new(&self.device, &self.config, cap.formats[0]));
         }
 
+        let (width, height) = monitor.capture.physical_size();
+
         monitor.surface.configure(
             &self.device,
             &wgpu::SurfaceConfiguration {
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                 format: cap.formats[0],
-                width: (monitor.rect.width * monitor.output_info.scale_factor) as u32,
-                height: (monitor.rect.height * monitor.output_info.scale_factor) as u32,
+                width,
+                height,
                 present_mode: wgpu::PresentMode::Mailbox,
                 alpha_mode: wgpu::CompositeAlphaMode::Opaque,
                 view_formats: vec![cap.formats[0]],
@@ -59,13 +61,7 @@ impl LayerShellHandler for RuntimeData {
             },
         );
 
-        let mon_rendering = MonSpecificRendering::new(
-            &monitor.rect,
-            &monitor.output_info,
-            cap.formats[0],
-            monitor.image.to_rgba8(),
-            self,
-        );
+        let mon_rendering = MonSpecificRendering::new(&monitor.capture, cap.formats[0], self);
 
         // Reborrow mutably to set the renderer
         let monitor = self

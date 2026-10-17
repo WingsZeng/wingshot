@@ -66,12 +66,7 @@ impl KeyboardHandler for RuntimeData {
                 let flattened_selection = self.selection.flattened();
                 match flattened_selection {
                     Selection::Rectangle(Some(selection)) => {
-                        let mut rect = selection.extents.to_rect();
-                        // Alter coordinate space so the rect can be used to crop from the original image
-                        rect.x -= self.area.x;
-                        rect.y -= self.area.y;
-
-                        self.exit = ExitState::ExitWithSelection(rect)
+                        self.exit = ExitState::ExitWithSelection(selection.extents.to_rect())
                     }
                     Selection::Display(Some(selection)) => {
                         let monitor = self
@@ -80,12 +75,7 @@ impl KeyboardHandler for RuntimeData {
                             .find(|monitor| monitor.wl_surface == selection.wl_surface)
                             .unwrap();
 
-                        let mut rect = monitor.rect;
-
-                        rect.x -= self.area.x;
-                        rect.y -= self.area.y;
-
-                        self.exit = ExitState::ExitWithSelection(rect)
+                        self.exit = ExitState::ExitWithSelection(monitor.capture.rect)
                     }
                     Selection::Window(_) => unreachable!(
                         "Window selection should have been flattened into Rectangle selection"

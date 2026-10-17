@@ -29,7 +29,7 @@ impl PointerHandler for RuntimeData {
                 .iter()
                 .find(|layer| layer.wl_surface == event.surface)
                 .unwrap();
-            let global_pos = event.position.to_global(&layer.rect);
+            let global_pos = event.position.to_global(&layer.capture.rect);
 
             match event.kind {
                 Enter { .. } => {
@@ -78,8 +78,9 @@ impl PointerHandler for RuntimeData {
                                         extents.end_x -= x - global_pos.0;
                                         extents.end_y -= y - global_pos.1;
 
-                                        selection.extents =
-                                            extents.to_rect_clamped(&self.area).to_extents();
+                                        selection.extents = extents
+                                            .to_rect_clamped(&self.capture.rect)
+                                            .to_extents();
                                     }
                                 },
                                 None => {
